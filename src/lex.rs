@@ -1,4 +1,5 @@
 use nom::{
+    IResult, Parser,
     branch::alt,
     bytes::complete::{is_not, tag, tag_no_case, take, take_while, take_while1},
     character::{
@@ -8,9 +9,8 @@ use nom::{
     combinator::{map, not, opt, value, verify},
     multi::{fold_many0, many0},
     sequence::{delimited, preceded, tuple},
-    IResult, Parser,
 };
-use nom_locate::{position, LocatedSpan};
+use nom_locate::{LocatedSpan, position};
 use std::{borrow::Cow, sync::Arc};
 use unicode_categories::UnicodeCategories;
 

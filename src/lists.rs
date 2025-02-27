@@ -138,7 +138,7 @@ pub async fn cdr(val: &Gc<Value>) -> Result<Vec<Gc<Value>>, Exception> {
 pub async fn set_car(var: &Gc<Value>, val: &Gc<Value>) -> Result<Vec<Gc<Value>>, Exception> {
     let mut var = var.write();
     match &mut *var {
-        Value::Pair(ref mut car, _cdr) => *car = val.clone(),
+        Value::Pair(car, _cdr) => *car = val.clone(),
         _ => todo!(),
     }
     Ok(vec![Gc::new(Value::Null)])
@@ -148,7 +148,7 @@ pub async fn set_car(var: &Gc<Value>, val: &Gc<Value>) -> Result<Vec<Gc<Value>>,
 pub async fn set_cdr(var: &Gc<Value>, val: &Gc<Value>) -> Result<Vec<Gc<Value>>, Exception> {
     let mut var = var.write();
     match &mut *var {
-        Value::Pair(_car, ref mut cdr) => *cdr = val.clone(),
+        Value::Pair(_car, cdr) => *cdr = val.clone(),
         _ => todo!(),
     }
     Ok(vec![Gc::new(Value::Null)])

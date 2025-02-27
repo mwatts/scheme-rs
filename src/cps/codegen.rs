@@ -3,12 +3,12 @@
 use compile::TopLevelExpr;
 use indexmap::IndexMap;
 use inkwell::{
+    AddressSpace,
     builder::{Builder, BuilderError},
     context::Context,
     execution_engine::ExecutionEngine,
     module::Module,
     values::{BasicValueEnum, FunctionValue, PointerValue},
-    AddressSpace,
 };
 use std::{collections::HashMap, rc::Rc};
 

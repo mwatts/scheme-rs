@@ -371,12 +371,11 @@ impl Compile for If {
                                 Cps::App(success, vec![Value::from(k1)])
                             })),
                         ),
-                        Box::new(if let Some(ref failure) = self.failure {
-                            failure.compile(Box::new(|failure| {
+                        Box::new(match self.failure {
+                            Some(ref failure) => failure.compile(Box::new(|failure| {
                                 Cps::App(failure, vec![Value::from(k1)])
-                            }))
-                        } else {
-                            Cps::App(Value::from(k1), Vec::new())
+                            })),
+                            _ => Cps::App(Value::from(k1), Vec::new()),
                         }),
                     )),
                     val: k3,
@@ -494,8 +493,8 @@ impl Compile for Definition {
 impl Definition {
     fn alloc_cells(&self, wrap: Cps) -> Cps {
         match self {
-            Self::DefineVar(ref def) => def.alloc_cells(wrap),
-            Self::DefineFunc(ref func) => func.alloc_cells(wrap),
+            Self::DefineVar(def) => def.alloc_cells(wrap),
+            Self::DefineFunc(func) => func.alloc_cells(wrap),
             _ => todo!(),
         }
     }
@@ -540,8 +539,8 @@ fn next_or_wrap(next: &Option<Either<Box<Definition>, ExprBody>>, wrap: Cps) -> 
 impl Compile for Option<Either<Box<Definition>, ExprBody>> {
     fn compile(&self, mut meta_cont: Box<dyn FnMut(Value) -> Cps + '_>) -> Cps {
         match self {
-            Some(Either::Left(ref def)) => def.compile(meta_cont),
-            Some(Either::Right(ref exprs)) => exprs.compile(meta_cont),
+            Some(Either::Left(def)) => def.compile(meta_cont),
+            Some(Either::Right(exprs)) => exprs.compile(meta_cont),
             _ => {
                 let k1 = Local::gensym();
                 let k2 = Local::gensym();

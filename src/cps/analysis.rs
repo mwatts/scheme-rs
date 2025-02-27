@@ -77,7 +77,7 @@ impl Analysis {
 impl Cps {
     pub(super) fn free_variables(&self) -> HashSet<Local> {
         match self {
-            Self::AllocCell(ref bind, cexpr) => {
+            Self::AllocCell(bind, cexpr) => {
                 let mut free = cexpr.free_variables();
                 free.remove(bind);
                 free

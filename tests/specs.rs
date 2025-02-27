@@ -6,10 +6,10 @@ use scheme_rs::{
     env::{Environment, Top},
     exception::Exception,
     gc::Gc,
-    registry::{bridge, Registry},
+    registry::{Registry, bridge},
     runtime::Runtime,
     syntax::{Span, Syntax},
-    value::{eqv, Value},
+    value::{Value, eqv},
 };
 
 #[bridge(name = "assert-eq", lib = "(base)")]

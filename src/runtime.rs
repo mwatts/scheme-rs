@@ -2,21 +2,21 @@ use crate::{
     cps::TopLevelExpr,
     env::Local,
     expand,
-    gc::{init_gc, Gc, GcInner, Trace},
+    gc::{Gc, GcInner, Trace, init_gc},
     lists::list_to_vec,
     proc::{
-        deep_clone_value, Application, Closure, FuncPtr, SyncFuncPtr, SyncFuncWithContinuationPtr,
+        Application, Closure, FuncPtr, SyncFuncPtr, SyncFuncWithContinuationPtr, deep_clone_value,
     },
     value::Value,
 };
 use indexmap::IndexMap;
 use inkwell::{
+    AddressSpace, OptimizationLevel,
     builder::BuilderError,
     context::Context,
     execution_engine::ExecutionEngine,
     module::Module,
     targets::{InitializationConfig, Target},
-    AddressSpace, OptimizationLevel,
 };
 use std::{collections::HashMap, mem::ManuallyDrop};
 use tokio::sync::{mpsc, oneshot};
@@ -264,8 +264,10 @@ unsafe extern "C" fn alloc_undef_val() -> *mut GcInner<Value> {
 
 /// Decrement the reference count of all of the values
 unsafe extern "C" fn drop_values(vals: *const *mut GcInner<Value>, num_vals: u32) {
-    for i in 0..num_vals {
-        Gc::drop_raw(vals.add(i as usize).read())
+    unsafe {
+        for i in 0..num_vals {
+            Gc::drop_raw(vals.add(i as usize).read())
+        }
     }
 }
 
@@ -277,17 +279,19 @@ unsafe extern "C" fn make_application(
     args: *const *mut GcInner<Value>,
     num_args: u32,
 ) -> *mut Application {
-    let mut gc_args = Vec::new();
-    for i in 0..num_args {
-        gc_args.push(Gc::from_ptr(args.add(i as usize).read()));
+    unsafe {
+        let mut gc_args = Vec::new();
+        for i in 0..num_args {
+            gc_args.push(Gc::from_ptr(args.add(i as usize).read()));
+        }
+
+        let op = Gc::from_ptr(op);
+        let op_read = op.read();
+        let op: &Closure = op_read.as_ref().try_into().unwrap();
+        let app = Application::new(op.clone(), gc_args);
+
+        Box::into_raw(Box::new(app))
     }
-
-    let op = Gc::from_ptr(op);
-    let op_read = op.read();
-    let op: &Closure = op_read.as_ref().try_into().unwrap();
-    let app = Application::new(op.clone(), gc_args);
-
-    Box::into_raw(Box::new(app))
 }
 
 /// Create a boxed application that forwards a list of values to the operator
@@ -295,39 +299,45 @@ unsafe extern "C" fn make_forward(
     op: *mut GcInner<Value>,
     to_forward: *mut GcInner<Value>,
 ) -> *mut Application {
-    let op = Gc::from_ptr(op);
-    let to_forward = Gc::from_ptr(to_forward);
-    let mut args = Vec::new();
-    list_to_vec(&to_forward, &mut args);
-    let op_ref = op.read();
-    let op: &Closure = op_ref.as_ref().try_into().unwrap();
-    let app = Application::new(op.clone(), args);
+    unsafe {
+        let op = Gc::from_ptr(op);
+        let to_forward = Gc::from_ptr(to_forward);
+        let mut args = Vec::new();
+        list_to_vec(&to_forward, &mut args);
+        let op_ref = op.read();
+        let op: &Closure = op_ref.as_ref().try_into().unwrap();
+        let app = Application::new(op.clone(), args);
 
-    Box::into_raw(Box::new(app))
+        Box::into_raw(Box::new(app))
+    }
 }
 
 /// Create a boxed application that simply returns its arguments
 pub(crate) unsafe extern "C" fn make_return_values(args: *mut GcInner<Value>) -> *mut Application {
-    let args = Gc::from_ptr(args);
-    let mut flattened = Vec::new();
-    list_to_vec(&args, &mut flattened);
+    unsafe {
+        let args = Gc::from_ptr(args);
+        let mut flattened = Vec::new();
+        list_to_vec(&args, &mut flattened);
 
-    let app = Application::new_empty(flattened);
+        let app = Application::new_empty(flattened);
 
-    Box::into_raw(Box::new(app))
+        Box::into_raw(Box::new(app))
+    }
 }
 
 /// Evaluate a `Gc<Value>` as "truthy" or not, as in whether it triggers a conditional.
 unsafe extern "C" fn truthy(val: *mut GcInner<Value>) -> bool {
-    Gc::from_ptr(val).read().is_true()
+    unsafe { Gc::from_ptr(val).read().is_true() }
 }
 
 /// Replace the value pointed to at to with the value contained in from.
 unsafe extern "C" fn store(from: *mut GcInner<Value>, to: *mut GcInner<Value>) {
-    let from = Gc::from_ptr(from);
-    let to = Gc::from_ptr(to);
-    let new_val = from.read().clone();
-    *to.write() = new_val;
+    unsafe {
+        let from = Gc::from_ptr(from);
+        let to = Gc::from_ptr(to);
+        let new_val = from.read().clone();
+        *to.write() = new_val;
+    }
 }
 
 /// Allocate a closure
@@ -341,29 +351,31 @@ unsafe extern "C" fn make_continuation(
     num_required_args: u32,
     variadic: bool,
 ) -> *mut GcInner<Value> {
-    // Collect the environment:
-    let env: Vec<_> = (0..num_envs)
-        .map(|i| Gc::from_ptr(env.add(i as usize).read()))
-        .collect();
+    unsafe {
+        // Collect the environment:
+        let env: Vec<_> = (0..num_envs)
+            .map(|i| Gc::from_ptr(env.add(i as usize).read()))
+            .collect();
 
-    // Collect the globals:
-    let globals: Vec<_> = (0..num_globals)
-        .map(|i| {
-            let raw = globals.add(i as usize).read();
-            Gc::from_ptr(raw)
-        })
-        .collect();
+        // Collect the globals:
+        let globals: Vec<_> = (0..num_globals)
+            .map(|i| {
+                let raw = globals.add(i as usize).read();
+                Gc::from_ptr(raw)
+            })
+            .collect();
 
-    let closure = Closure::new(
-        Gc::from_ptr(runtime),
-        env,
-        globals,
-        FuncPtr::SyncFunc(fn_ptr),
-        num_required_args as usize,
-        variadic,
-        true,
-    );
-    ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+        let closure = Closure::new(
+            Gc::from_ptr(runtime),
+            env,
+            globals,
+            FuncPtr::SyncFunc(fn_ptr),
+            num_required_args as usize,
+            variadic,
+            true,
+        );
+        ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+    }
 }
 
 /// Allocate a closure for a function that takes a continuation
@@ -377,52 +389,58 @@ unsafe extern "C" fn make_closure(
     num_required_args: u32,
     variadic: bool,
 ) -> *mut GcInner<Value> {
-    // Collect the environment:
-    let env: Vec<_> = (0..num_envs)
-        .map(|i| Gc::from_ptr(env.add(i as usize).read()))
-        .collect();
+    unsafe {
+        // Collect the environment:
+        let env: Vec<_> = (0..num_envs)
+            .map(|i| Gc::from_ptr(env.add(i as usize).read()))
+            .collect();
 
-    // Collect the globals:
-    let globals: Vec<_> = (0..num_globals)
-        .map(|i| {
-            let raw = globals.add(i as usize).read();
-            Gc::from_ptr(raw)
-        })
-        .collect();
+        // Collect the globals:
+        let globals: Vec<_> = (0..num_globals)
+            .map(|i| {
+                let raw = globals.add(i as usize).read();
+                Gc::from_ptr(raw)
+            })
+            .collect();
 
-    let closure = Closure::new(
-        Gc::from_ptr(runtime),
-        env,
-        globals,
-        FuncPtr::SyncFuncWithContinuation(fn_ptr),
-        num_required_args as usize,
-        variadic,
-        false,
-    );
-    ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+        let closure = Closure::new(
+            Gc::from_ptr(runtime),
+            env,
+            globals,
+            FuncPtr::SyncFuncWithContinuation(fn_ptr),
+            num_required_args as usize,
+            variadic,
+            false,
+        );
+        ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+    }
 }
 
 /// Call a transformer with the given argument and return the expansion
 unsafe extern "C" fn get_call_transformer_fn(
     runtime: *mut GcInner<Runtime>,
 ) -> *mut GcInner<Value> {
-    let closure = Closure::new(
-        Gc::from_ptr(runtime),
-        Vec::new(),
-        Vec::new(),
-        FuncPtr::AsyncFunc(expand::call_transformer),
-        3,
-        true,
-        false,
-    );
-    ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+    unsafe {
+        let closure = Closure::new(
+            Gc::from_ptr(runtime),
+            Vec::new(),
+            Vec::new(),
+            FuncPtr::AsyncFunc(expand::call_transformer),
+            3,
+            true,
+            false,
+        );
+        ManuallyDrop::new(Gc::new(Value::Closure(closure))).as_ptr()
+    }
 }
 
 /// Clone the values in a closure's environment.
 ///
 /// This is done so poorly and is extremely slow. Need to fix!!
 unsafe extern "C" fn clone_closure(closure: *mut GcInner<Value>) -> *mut GcInner<Value> {
-    let closure = Gc::from_ptr(closure);
-    let mut cloned = HashMap::new();
-    ManuallyDrop::new(deep_clone_value(&closure, &mut cloned)).as_ptr()
+    unsafe {
+        let closure = Gc::from_ptr(closure);
+        let mut cloned = HashMap::new();
+        ManuallyDrop::new(deep_clone_value(&closure, &mut cloned)).as_ptr()
+    }
 }

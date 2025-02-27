@@ -90,12 +90,16 @@ pub fn expression<'a, 'b>(
             Syntax::new_identifier(i.lexeme.to_ident(), i.span.clone()),
         )),
         // Lists:
-        [n @ token!(Lexeme::LParen), token!(Lexeme::RParen), tail @ ..] => {
-            Ok((tail, Syntax::new_null(n.span.clone())))
-        }
-        [n @ token!(Lexeme::LBracket), token!(Lexeme::RBracket), tail @ ..] => {
-            Ok((tail, Syntax::new_null(n.span.clone())))
-        }
+        [
+            n @ token!(Lexeme::LParen),
+            token!(Lexeme::RParen),
+            tail @ ..,
+        ] => Ok((tail, Syntax::new_null(n.span.clone()))),
+        [
+            n @ token!(Lexeme::LBracket),
+            token!(Lexeme::RBracket),
+            tail @ ..,
+        ] => Ok((tail, Syntax::new_null(n.span.clone()))),
         [p @ token!(Lexeme::LParen), tail @ ..] => match list(tail, p.span.clone(), Lexeme::RParen)
         {
             Err(ParseListError::UnclosedParen) => Err(ParseSyntaxError::unclosed_paren(p)),
@@ -185,10 +189,20 @@ fn list<'a, 'b>(
                 output.push(Syntax::new_null(token.span.clone()));
                 return Ok((tail, Syntax::new_list(output, span)));
             }
-            [token!(Lexeme::Period), end @ token!(Lexeme::LParen), token!(Lexeme::RParen), token, tail @ ..]
-            | [token!(Lexeme::Period), end @ token!(Lexeme::LBracket), token!(Lexeme::RBracket), token, tail @ ..]
-                if token.lexeme == closing =>
-            {
+            [
+                token!(Lexeme::Period),
+                end @ token!(Lexeme::LParen),
+                token!(Lexeme::RParen),
+                token,
+                tail @ ..,
+            ]
+            | [
+                token!(Lexeme::Period),
+                end @ token!(Lexeme::LBracket),
+                token!(Lexeme::RBracket),
+                token,
+                tail @ ..,
+            ] if token.lexeme == closing => {
                 output.push(Syntax::new_null(end.span.clone()));
                 return Ok((tail, Syntax::new_list(output, span)));
             }
@@ -237,7 +251,7 @@ fn vector<'a, 'b>(
         match i {
             [] => return Err(ParseVectorError::UnclosedParen),
             [token!(Lexeme::RParen), tail @ ..] => {
-                return Ok((tail, Syntax::new_vector(output, span)))
+                return Ok((tail, Syntax::new_vector(output, span)));
             }
             _ => (),
         }

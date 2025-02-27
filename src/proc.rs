@@ -113,7 +113,7 @@ impl Closure {
             _globals: *const *mut GcInner<Value>,
             args: *const *mut GcInner<Value>,
         ) -> *mut Application {
-            crate::runtime::make_return_values(args.read())
+            unsafe { crate::runtime::make_return_values(args.read()) }
         }
 
         let mut args = args.to_vec();
@@ -318,32 +318,34 @@ unsafe extern "C" fn call_consumer_with_values(
     _globals: *const *mut GcInner<Value>,
     args: *const *mut GcInner<Value>,
 ) -> *mut Application {
-    // env[0] is the consumer
-    let consumer = Gc::from_ptr(env.read());
-    let consumer = {
-        let consumer_ref = consumer.read();
-        let consumer: &Closure = consumer_ref.as_ref().try_into().unwrap();
-        consumer.clone()
-    };
-    // env[1] is the continuation
-    let cont = Gc::from_ptr(env.add(1).read());
+    unsafe {
+        // env[0] is the consumer
+        let consumer = Gc::from_ptr(env.read());
+        let consumer = {
+            let consumer_ref = consumer.read();
+            let consumer: &Closure = consumer_ref.as_ref().try_into().unwrap();
+            consumer.clone()
+        };
+        // env[1] is the continuation
+        let cont = Gc::from_ptr(env.add(1).read());
 
-    let mut collected_args: Vec<_> = (0..consumer.num_required_args)
-        .map(|i| Gc::from_ptr(args.add(i).read()))
-        .collect();
+        let mut collected_args: Vec<_> = (0..consumer.num_required_args)
+            .map(|i| Gc::from_ptr(args.add(i).read()))
+            .collect();
 
-    // I hate this constant going back and forth from variadic to list. I have
-    // to figure out a way to make it consistent
-    if consumer.variadic {
-        let rest_args = Gc::from_ptr(args.add(consumer.num_required_args).read());
-        let mut vec = Vec::new();
-        list_to_vec(&rest_args, &mut vec);
-        collected_args.extend(vec);
+        // I hate this constant going back and forth from variadic to list. I have
+        // to figure out a way to make it consistent
+        if consumer.variadic {
+            let rest_args = Gc::from_ptr(args.add(consumer.num_required_args).read());
+            let mut vec = Vec::new();
+            list_to_vec(&rest_args, &mut vec);
+            collected_args.extend(vec);
+        }
+
+        collected_args.push(cont);
+
+        Box::into_raw(Box::new(Application::new(consumer, collected_args)))
     }
-
-    collected_args.push(cont);
-
-    Box::into_raw(Box::new(Application::new(consumer, collected_args)))
 }
 
 pub fn call_with_values<'a>(

@@ -100,11 +100,13 @@ impl Pattern {
         loop {
             match expr {
                 [] => break,
-                [pattern, Syntax::Identifier {
-                    ident: ellipsis, ..
-                }, tail @ ..]
-                    if ellipsis.name == "..." =>
-                {
+                [
+                    pattern,
+                    Syntax::Identifier {
+                        ident: ellipsis, ..
+                    },
+                    tail @ ..,
+                ] if ellipsis.name == "..." => {
                     output.push(Self::Ellipsis(Box::new(Pattern::compile(
                         pattern, keywords, variables,
                     ))));
@@ -122,21 +124,23 @@ impl Pattern {
     fn matches(&self, expr: &Syntax, expansion_level: &mut ExpansionLevel) -> bool {
         match self {
             Self::Underscore => !expr.is_null(),
-            Self::Variable(ref name) => {
-                assert!(expansion_level
-                    .binds
-                    .insert(name.clone(), expr.clone())
-                    .is_none());
+            Self::Variable(name) => {
+                assert!(
+                    expansion_level
+                        .binds
+                        .insert(name.clone(), expr.clone())
+                        .is_none()
+                );
                 true
             }
-            Self::Literal(ref lhs) => {
+            Self::Literal(lhs) => {
                 if let Syntax::Literal { literal: rhs, .. } = expr {
                     lhs == rhs
                 } else {
                     false
                 }
             }
-            Self::Keyword(ref lhs) => {
+            Self::Keyword(lhs) => {
                 matches!(expr, Syntax::Identifier { ident: rhs, bound: false, .. } if lhs == &rhs.name)
             }
             Self::List(list) => match_slice(list, expr, expansion_level),
@@ -270,11 +274,13 @@ impl Template {
         loop {
             match expr {
                 [] => break,
-                [template, Syntax::Identifier {
-                    ident: ellipsis, ..
-                }, tail @ ..]
-                    if ellipsis.name == "..." =>
-                {
+                [
+                    template,
+                    Syntax::Identifier {
+                        ident: ellipsis, ..
+                    },
+                    tail @ ..,
+                ] if ellipsis.name == "..." => {
                     output.push(Self::Ellipsis(Box::new(Template::compile(
                         template, variables,
                     ))));
@@ -325,13 +331,14 @@ fn execute_slice(items: &[Template], binds: &Binds<'_>, curr_span: Span) -> Opti
                     output.push(result);
                 }
             }
-            Template::Null => {
-                if let Some(Syntax::Null { .. }) = output.last() {
+            Template::Null => match output.last() {
+                Some(Syntax::Null { .. }) => {
                     continue;
-                } else {
+                }
+                _ => {
                     output.push(Syntax::new_null(curr_span.clone()));
                 }
-            }
+            },
             _ => output.push(item.execute(binds, curr_span.clone())?),
         }
     }
@@ -359,12 +366,15 @@ impl<'a> Binds<'a> {
     }
 
     fn get_bind(&self, name: &str) -> Option<Syntax> {
-        if let bind @ Some(_) = self.curr_expansion_level.binds.get(name) {
-            bind.cloned()
-        } else if let Some(up) = self.parent_expansion_level {
-            up.get_bind(name)
-        } else {
-            None
+        match self.curr_expansion_level.binds.get(name) {
+            bind @ Some(_) => bind.cloned(),
+            _ => {
+                if let Some(up) = self.parent_expansion_level {
+                    up.get_bind(name)
+                } else {
+                    None
+                }
+            }
         }
     }
 }

@@ -154,7 +154,7 @@ pub async fn digit_value(ch: &Gc<Value>) -> Result<Vec<Gc<Value>>, Exception> {
 }
 
 macro_rules! impl_char_case_converter {
-    ($(($bridge_name:literal, $function_name:ident, $converter:expr)),* $(,)?) => {
+    ($(($bridge_name:literal, $function_name:ident, $converter:expr_2021)),* $(,)?) => {
         $(#[bridge(name = $bridge_name, lib = "(base)")]
         pub async fn $function_name(ch: &Gc<Value>) -> Result<Vec<Gc<Value>>, Exception> {
             let ch = ch.read();

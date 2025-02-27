@@ -90,12 +90,12 @@ pub enum Syntax {
 impl Syntax {
     pub fn mark(&mut self, mark: Mark) {
         match self {
-            Self::List { ref mut list, .. } => {
+            Self::List { list, .. } => {
                 for item in list {
                     item.mark(mark);
                 }
             }
-            Self::Vector { ref mut vector, .. } => {
+            Self::Vector { vector, .. } => {
                 for item in vector {
                     item.mark(mark);
                 }
@@ -107,12 +107,12 @@ impl Syntax {
 
     pub fn mark_many(&mut self, marks: &BTreeSet<Mark>) {
         match self {
-            Self::List { ref mut list, .. } => {
+            Self::List { list, .. } => {
                 for item in list {
                     item.mark_many(marks);
                 }
             }
-            Self::Vector { ref mut vector, .. } => {
+            Self::Vector { vector, .. } => {
                 for item in vector {
                     item.mark_many(marks);
                 }
@@ -125,15 +125,16 @@ impl Syntax {
     // I do not like the fact that this function exists.
     pub fn normalize(self) -> Self {
         match self {
-            Self::List { mut list, span } => {
-                if let [Syntax::Null { .. }] = list.as_slice() {
-                    list.pop().unwrap()
-                } else if list.is_empty() {
-                    Syntax::Null { span }
-                } else {
-                    Self::List { list, span }
+            Self::List { mut list, span } => match list.as_slice() {
+                [Syntax::Null { .. }] => list.pop().unwrap(),
+                _ => {
+                    if list.is_empty() {
+                        Syntax::Null { span }
+                    } else {
+                        Self::List { list, span }
+                    }
                 }
-            }
+            },
             x => x,
         }
     }
@@ -176,17 +177,17 @@ impl Syntax {
 
     pub fn resolve_bindings(&mut self, env: &Environment) {
         match self {
-            Self::List { ref mut list, .. } => {
+            Self::List { list, .. } => {
                 for item in list {
                     item.resolve_bindings(env);
                 }
             }
-            Self::Vector { ref mut vector, .. } => {
+            Self::Vector { vector, .. } => {
                 for item in vector {
                     item.resolve_bindings(env);
                 }
             }
-            Self::Identifier {
+            &mut Self::Identifier {
                 ref ident,
                 ref mut bound,
                 ..

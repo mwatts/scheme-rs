@@ -4,7 +4,7 @@ use crate::{
     registry::bridge,
     value::Value,
 };
-use num::{complex::Complex64, FromPrimitive, ToPrimitive, Zero};
+use num::{FromPrimitive, ToPrimitive, Zero, complex::Complex64};
 use rug::{Complete, Integer, Rational};
 use std::{
     cmp::Ordering,
